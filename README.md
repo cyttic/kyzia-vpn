@@ -43,8 +43,12 @@ Requirements:
 `Actions → Deploy WireGuard VPN → Run workflow`, set the device name (e.g. `phone`)
 and port, then run. When it finishes, download the **`wg-<name>`** artifact — that's
 your `.conf`. Import it into the WireGuard app, toggle on, then **delete the run** (the
-artifact holds a private key). Re-running with the same name safely replaces that
-device; a new name adds another device.
+artifact holds a private key).
+
+Re-running (including every push) **keeps an existing device's config valid** — it
+won't regenerate keys for a name that already exists. To roll new keys for a device,
+run the workflow manually with **`force = true`** (or `FORCE=1` for the script). A new
+device name always adds a new client.
 
 ---
 

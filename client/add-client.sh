@@ -30,10 +30,21 @@ fi
 
 SERVER_PUB="$(cat "${WG_DIR}/server_public.key")"
 
-# Idempotent: if a peer with this name already exists, drop its block so we can
-# regenerate cleanly (safe to re-run the workflow with the same name).
-if grep -q "^# ${NAME}$" "${WG_DIR}/${WG_IF}.conf"; then
-  echo ">> Client '${NAME}' already exists — replacing it."
+# Idempotent re-runs:
+#   - If this device already exists AND its config is on disk, keep it as-is so
+#     repeated deploys don't invalidate a config you're already using.
+#   - Set FORCE=1 to wipe and regenerate it (new keys).
+FORCE="${FORCE:-0}"
+if grep -q "^# ${NAME}$" "${WG_DIR}/${WG_IF}.conf" && [[ -f "${OUT_DIR}/${NAME}.conf" ]]; then
+  if [[ "${FORCE}" != "1" ]]; then
+    echo ">> Client '${NAME}' already exists — keeping it (set FORCE=1 to regenerate)."
+    if [[ -n "${SUDO_USER:-}" ]]; then
+      chown "${SUDO_USER}:${SUDO_USER}" "${OUT_DIR}/${NAME}.conf" 2>/dev/null || true
+    fi
+    echo ">> Existing config: ${OUT_DIR}/${NAME}.conf"
+    exit 0
+  fi
+  echo ">> FORCE=1 — replacing existing client '${NAME}'."
   awk -v name="# ${NAME}" '
     BEGIN { RS=""; ORS="\n\n" }
     $0 ~ ("(^|\n)" name "(\n|$)") { next }

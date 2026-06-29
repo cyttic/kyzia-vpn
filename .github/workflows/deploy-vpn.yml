@@ -25,6 +25,10 @@ on:
         description: "WireGuard UDP port (try 443 if 51820 is censored)"
         required: true
         default: "51820"
+      force:
+        description: "Regenerate the device even if it already exists (new keys)"
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -35,6 +39,8 @@ jobs:
       # On push there are no form inputs, so fall back to these defaults.
       CLIENT_NAME: ${{ github.event.inputs.client_name || 'phone' }}
       WG_PORT: ${{ github.event.inputs.wg_port || '51820' }}
+      # On push: keep existing device configs valid. Manual run can force new keys.
+      FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,7 +73,7 @@ jobs:
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
             "set -e; cd \$HOME/kyzia-vpn; \
-             sudo env ENDPOINT='$SSH_HOST' WG_PORT='$WG_PORT' OUT_DIR=\$HOME/kyzia-vpn/clients \
+             sudo env ENDPOINT='$SSH_HOST' WG_PORT='$WG_PORT' FORCE='$FORCE' OUT_DIR=\$HOME/kyzia-vpn/clients \
                bash client/add-client.sh '$CLIENT_NAME' 1>&2; \
              sudo cat \$HOME/kyzia-vpn/clients/'$CLIENT_NAME'.conf" > "$CLIENT_NAME.conf"
           if [[ ! -s "$CLIENT_NAME.conf" ]]; then
