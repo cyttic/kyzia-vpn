@@ -38,7 +38,7 @@ echo ">> WAN interface detected: ${WAN_IF}"
 echo ">> Installing packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq wireguard qrencode iptables >/dev/null
+apt-get install -y -qq wireguard qrencode iptables curl >/dev/null
 
 echo ">> Enabling IPv4 forwarding..."
 sysctl_conf="/etc/sysctl.d/99-wireguard.conf"

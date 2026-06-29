@@ -53,21 +53,27 @@ jobs:
 
       - name: Install / refresh WireGuard server
         run: |
+          # `sudo env VAR=...` reliably passes vars through sudo (the bare
+          # `sudo VAR=... cmd` form is dropped by some sudoers configs).
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
-            "cd ~/kyzia-vpn && sudo WG_PORT='$WG_PORT' bash server/setup-server.sh"
+            "set -e; cd \$HOME/kyzia-vpn; \
+             sudo env WG_PORT='$WG_PORT' bash server/setup-server.sh"
 
       - name: Add client and fetch its config
         run: |
+          # add-client's chatty output -> stderr (visible in the log); only the
+          # config itself (sudo cat, absolute path) goes to stdout -> the file.
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
-            "cd ~/kyzia-vpn && sudo ENDPOINT='$SSH_HOST' WG_PORT='$WG_PORT' bash client/add-client.sh '$CLIENT_NAME'"
-          scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
-            "$SSH_USER@$SSH_HOST:~/kyzia-vpn/clients/$CLIENT_NAME.conf" \
-            "./$CLIENT_NAME.conf"
+            "set -e; cd \$HOME/kyzia-vpn; \
+             sudo env ENDPOINT='$SSH_HOST' WG_PORT='$WG_PORT' OUT_DIR=\$HOME/kyzia-vpn/clients \
+               bash client/add-client.sh '$CLIENT_NAME' 1>&2; \
+             sudo cat \$HOME/kyzia-vpn/clients/'$CLIENT_NAME'.conf" > "$CLIENT_NAME.conf"
           if [[ ! -s "$CLIENT_NAME.conf" ]]; then
-            echo "::error::Client config was not produced"; exit 1
+            echo "::error::Client config was empty or not produced (see step log above)"; exit 1
           fi
+          echo "Captured $(wc -l < "$CLIENT_NAME.conf") lines into $CLIENT_NAME.conf"
 
       - name: Upload client config (download it, then delete this run)
         uses: actions/upload-artifact@v4
