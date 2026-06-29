@@ -1,0 +1,11 @@
+# NEVER commit private keys or generated client configs
+*.key
+*_private.key
+privatekey
+publickey
+clients/*.conf
+clients/*.png
+*.pem
+
+# local env
+.env
