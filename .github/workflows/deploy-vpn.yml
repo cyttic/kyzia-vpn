@@ -11,6 +11,10 @@ name: Deploy WireGuard VPN
 # (run azure/open-ports.sh yourself, or open it in the Azure Portal).
 
 on:
+  # Deploy automatically on every push to main...
+  push:
+    branches: [main]
+  # ...and allow manual runs with a custom device name / port.
   workflow_dispatch:
     inputs:
       client_name:
@@ -28,6 +32,9 @@ jobs:
     env:
       SSH_USER: ${{ secrets.AZURE_USER }}
       SSH_HOST: ${{ secrets.AZURE_ADDRESS }}
+      # On push there are no form inputs, so fall back to these defaults.
+      CLIENT_NAME: ${{ github.event.inputs.client_name || 'phone' }}
+      WG_PORT: ${{ github.event.inputs.wg_port || '51820' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,23 +55,23 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
-            "cd ~/kyzia-vpn && sudo WG_PORT='${{ inputs.wg_port }}' bash server/setup-server.sh"
+            "cd ~/kyzia-vpn && sudo WG_PORT='$WG_PORT' bash server/setup-server.sh"
 
       - name: Add client and fetch its config
         run: |
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
             "$SSH_USER@$SSH_HOST" \
-            "cd ~/kyzia-vpn && sudo ENDPOINT='$SSH_HOST' WG_PORT='${{ inputs.wg_port }}' bash client/add-client.sh '${{ inputs.client_name }}'"
+            "cd ~/kyzia-vpn && sudo ENDPOINT='$SSH_HOST' WG_PORT='$WG_PORT' bash client/add-client.sh '$CLIENT_NAME'"
           scp -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
-            "$SSH_USER@$SSH_HOST:~/kyzia-vpn/clients/${{ inputs.client_name }}.conf" \
-            "./${{ inputs.client_name }}.conf"
-          if [[ ! -s "${{ inputs.client_name }}.conf" ]]; then
+            "$SSH_USER@$SSH_HOST:~/kyzia-vpn/clients/$CLIENT_NAME.conf" \
+            "./$CLIENT_NAME.conf"
+          if [[ ! -s "$CLIENT_NAME.conf" ]]; then
             echo "::error::Client config was not produced"; exit 1
           fi
 
       - name: Upload client config (download it, then delete this run)
         uses: actions/upload-artifact@v4
         with:
-          name: wg-${{ inputs.client_name }}
-          path: ${{ inputs.client_name }}.conf
+          name: wg-${{ env.CLIENT_NAME }}
+          path: ${{ env.CLIENT_NAME }}.conf
           retention-days: 1
