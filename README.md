@@ -17,7 +17,38 @@ geo-restricted services, and bypassing network censorship.
 - SSH access to the VM.
 - `az` CLI logged in locally (`az login`) to open the firewall port.
 
-## Setup (3 steps)
+## Option A — Deploy from GitHub Actions (SSH)
+
+The `Deploy WireGuard VPN` workflow SSHes into the VM and runs the setup/add-client
+scripts, then returns the client config as a downloadable artifact.
+
+### One-time: add three repo secrets
+`Settings → Secrets and variables → Actions → New repository secret`
+
+| Secret name     | Value                                            |
+|-----------------|--------------------------------------------------|
+| `AZURE_USER`    | SSH username on the VM (e.g. `azureuser`)         |
+| `AZURE_ADDRESS` | VM address / public IP (`20.197.16.237`)          |
+| `AZURE_SSH_KEY` | the **private** SSH key that logs into the VM     |
+
+Requirements:
+- The VM must allow inbound **SSH (TCP 22)** so the GitHub runner can reach it.
+- The WireGuard **UDP port** must be open in the NSG — run `azure/open-ports.sh`
+  yourself (see Option B, step 2) or open it in the Azure Portal.
+- The SSH user needs passwordless `sudo` (Azure's default `azureuser` has it).
+
+> Keep this repo **private** — workflow artifacts contain a client private key.
+
+### Run it
+`Actions → Deploy WireGuard VPN → Run workflow`, set the device name (e.g. `phone`)
+and port, then run. When it finishes, download the **`wg-<name>`** artifact — that's
+your `.conf`. Import it into the WireGuard app, toggle on, then **delete the run** (the
+artifact holds a private key). Re-running with the same name safely replaces that
+device; a new name adds another device.
+
+---
+
+## Option B — Manual setup (3 steps)
 
 ### 1. Install the server (on the VM)
 Copy this repo to the VM (`scp -r . user@vm:~/kyzia-vpn`), then:

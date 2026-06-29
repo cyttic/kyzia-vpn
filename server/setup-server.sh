@@ -56,6 +56,13 @@ else
 fi
 SERVER_PRIV="$(cat "${WG_DIR}/server_private.key")"
 
+# Preserve existing [Peer] blocks across re-runs so a redeploy doesn't drop clients.
+EXISTING_PEERS=""
+if [[ -f "${WG_DIR}/${WG_IF}.conf" ]]; then
+  EXISTING_PEERS="$(awk '/^\[Peer\]/{p=1} p{print}' "${WG_DIR}/${WG_IF}.conf")"
+  [[ -n "${EXISTING_PEERS}" ]] && echo ">> Preserving existing client peers."
+fi
+
 echo ">> Writing ${WG_DIR}/${WG_IF}.conf ..."
 cat > "${WG_DIR}/${WG_IF}.conf" <<EOF
 # Managed by setup-server.sh — edit [Peer] blocks via client/add-client.sh
@@ -68,6 +75,9 @@ PrivateKey = ${SERVER_PRIV}
 PostUp   = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${WAN_IF} -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${WAN_IF} -j MASQUERADE
 EOF
+if [[ -n "${EXISTING_PEERS}" ]]; then
+  printf '\n%s\n' "${EXISTING_PEERS}" >> "${WG_DIR}/${WG_IF}.conf"
+fi
 chmod 600 "${WG_DIR}/${WG_IF}.conf"
 
 echo ">> Enabling service..."

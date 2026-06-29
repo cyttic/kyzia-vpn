@@ -30,6 +30,19 @@ fi
 
 SERVER_PUB="$(cat "${WG_DIR}/server_public.key")"
 
+# Idempotent: if a peer with this name already exists, drop its block so we can
+# regenerate cleanly (safe to re-run the workflow with the same name).
+if grep -q "^# ${NAME}$" "${WG_DIR}/${WG_IF}.conf"; then
+  echo ">> Client '${NAME}' already exists — replacing it."
+  awk -v name="# ${NAME}" '
+    BEGIN { RS=""; ORS="\n\n" }
+    $0 ~ ("(^|\n)" name "(\n|$)") { next }
+    { print }
+  ' "${WG_DIR}/${WG_IF}.conf" > "${WG_DIR}/${WG_IF}.conf.tmp"
+  mv "${WG_DIR}/${WG_IF}.conf.tmp" "${WG_DIR}/${WG_IF}.conf"
+  chmod 600 "${WG_DIR}/${WG_IF}.conf"
+fi
+
 # Pick the next free IP in the subnet (.2, .3, ...) by scanning existing peers.
 used="$(grep -oE "${WG_NET_PREFIX}\.[0-9]+" "${WG_DIR}/${WG_IF}.conf" || true)"
 next=2
@@ -69,6 +82,11 @@ AllowedIPs   = 0.0.0.0/0
 # Keep the tunnel alive through NAT/firewalls (important on mobile networks)
 PersistentKeepalive = 25
 EOF
+
+# If invoked via sudo, hand the config back to the real user (so they can read/scp it).
+if [[ -n "${SUDO_USER:-}" ]]; then
+  chown "${SUDO_USER}:${SUDO_USER}" "${CONF}" 2>/dev/null || true
+fi
 
 echo ">> Client '${NAME}' added as ${CLIENT_IP}"
 echo ">> Config written to: ${CONF}"
