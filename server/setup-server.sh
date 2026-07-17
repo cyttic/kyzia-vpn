@@ -54,15 +54,18 @@ apt-get update -qq
 # build the amneziawg kernel module via dkms.
 apt-get install -y -qq software-properties-common qrencode iptables curl >/dev/null
 if ! grep -Rq "amnezia" /etc/apt/sources.list.d/ 2>/dev/null; then
-  echo ">> Adding AmneziaWG apt repository..."
-  add-apt-repository -y ppa:amnezia/amneziawg >/dev/null
+  echo ">> Adding AmneziaWG apt repository (ppa:amnezia/ppa)..."
+  add-apt-repository -y ppa:amnezia/ppa
   apt-get update -qq
 fi
-echo ">> Installing kernel headers (for the amneziawg dkms module)..."
+echo ">> Installing kernel headers (needed to build the amneziawg module)..."
 apt-get install -y -qq "linux-headers-$(uname -r)" >/dev/null 2>&1 \
   || apt-get install -y -qq linux-headers-generic >/dev/null 2>&1 || true
-echo ">> Installing amneziawg + tools..."
-apt-get install -y -qq amneziawg amneziawg-tools >/dev/null
+# On Ubuntu the single 'amneziawg' package pulls in the kernel module AND the
+# awg / awg-quick tools. (The split amneziawg-dkms + amneziawg-tools names are
+# only for the RHEL/Fedora path.)
+echo ">> Installing amneziawg (module + awg/awg-quick tools)..."
+apt-get install -y amneziawg
 
 echo ">> Enabling IPv4 forwarding..."
 sysctl_conf="/etc/sysctl.d/99-amneziawg.conf"
