@@ -1,4 +1,4 @@
-name: Deploy WireGuard VPN
+name: Deploy AmneziaWG VPN
 
 # Connects to the Azure VM over SSH and runs the setup/add-client scripts.
 # Requires three repo secrets:
@@ -7,8 +7,9 @@ name: Deploy WireGuard VPN
 #   AZURE_SSH_KEY  - SSH PRIVATE key that logs into the VM
 #
 # Note: the VM must allow inbound SSH (TCP 22) from the internet for the GitHub
-# runner to reach it, and the WireGuard UDP port must be open in the NSG
-# (run azure/open-ports.sh yourself, or open it in the Azure Portal).
+# runner to reach it, and the AmneziaWG UDP port (443 by default) must be open in
+# the NSG — a ONE-TIME step: run azure/open-ports.sh yourself, or open it in the
+# Azure Portal. The deploy itself is fully automatic on every push to main.
 
 on:
   # Deploy automatically on every push to main...
@@ -22,9 +23,9 @@ on:
         required: true
         default: "phone"
       wg_port:
-        description: "WireGuard UDP port (try 443 if 51820 is censored)"
+        description: "AmneziaWG UDP port (443 blends with QUIC/HTTPS; 51820 is the plain default)"
         required: true
-        default: "51820"
+        default: "443"
       force:
         description: "Regenerate the device even if it already exists (new keys)"
         type: boolean
@@ -38,7 +39,9 @@ jobs:
       SSH_HOST: ${{ secrets.AZURE_ADDRESS }}
       # On push there are no form inputs, so fall back to these defaults.
       CLIENT_NAME: ${{ github.event.inputs.client_name || 'phone' }}
-      WG_PORT: ${{ github.event.inputs.wg_port || '51820' }}
+      # Default to UDP 443 — obfuscated AmneziaWG on 443 is the combo that beats
+      # Russia's TSPU. UDP 443 must be open in the NSG (one-time, see README).
+      WG_PORT: ${{ github.event.inputs.wg_port || '443' }}
       # On push: keep existing device configs valid. Manual run can force new keys.
       FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
     steps:

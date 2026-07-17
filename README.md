@@ -1,8 +1,19 @@
 # kyzia-vpn
 
-Self-hosted **WireGuard** VPN on an Azure VM. Connect from anywhere and your
+Self-hosted **AmneziaWG** VPN on an Azure VM. Connect from anywhere and your
 internet traffic exits from the VM's country — useful for privacy, accessing
 geo-restricted services, and bypassing network censorship.
+
+AmneziaWG is a WireGuard fork that **obfuscates the handshake** (junk packets +
+randomized magic headers) so DPI systems like Russia's TSPU can't fingerprint it
+as a VPN. It's as fast as WireGuard with a near-identical config — just extra
+obfuscation params that the server and every client share.
+
+> **Client app:** you must use an **AmneziaWG-capable** client — the *AmneziaWG*
+> app ([iOS](https://apps.apple.com/app/amneziawg/id6478942365) /
+> [Android](https://play.google.com/store/apps/details?id=org.amnezia.awg)), the
+> Amnezia VPN client, or `awg-quick` on Linux. The **stock WireGuard app will not
+> work** — it doesn't understand the obfuscation params.
 
 ```
   [ your phone/laptop ]  --encrypted-->  [ Azure VM (e.g. Germany) ]  -->  internet
@@ -33,17 +44,20 @@ scripts, then returns the client config as a downloadable artifact.
 
 Requirements:
 - The VM must allow inbound **SSH (TCP 22)** so the GitHub runner can reach it.
-- The WireGuard **UDP port** must be open in the NSG — run `azure/open-ports.sh`
-  yourself (see Option B, step 2) or open it in the Azure Portal.
+- **UDP 443** (the deploy's default port) must be open in the NSG — a **one-time**
+  step: run `azure/open-ports.sh` yourself (see Option B, step 2) or open it in the
+  Azure Portal. After that, every push deploys automatically.
 - The SSH user needs passwordless `sudo` (Azure's default `azureuser` has it).
 
 > Keep this repo **private** — workflow artifacts contain a client private key.
 
 ### Run it
-`Actions → Deploy WireGuard VPN → Run workflow`, set the device name (e.g. `phone`)
-and port, then run. When it finishes, download the **`wg-<name>`** artifact — that's
-your `.conf`. Import it into the WireGuard app, toggle on, then **delete the run** (the
-artifact holds a private key).
+Just **push to `main`** — the deploy runs automatically on UDP 443 and refreshes the
+`phone` client. Or trigger it manually: `Actions → Deploy AmneziaWG VPN → Run
+workflow`, set the device name / port, then run. When it finishes, download the
+**`wg-<name>`** artifact — that's your `.conf`. Import it into the **AmneziaWG** app
+(not stock WireGuard), toggle on, then **delete the run** (the artifact holds a
+private key).
 
 Re-running (including every push) **keeps an existing device's config valid** — it
 won't regenerate keys for a name that already exists. To roll new keys for a device,
@@ -57,24 +71,26 @@ device name always adds a new client.
 ### 1. Install the server (on the VM)
 Copy this repo to the VM (`scp -r . user@vm:~/kyzia-vpn`), then:
 ```bash
-sudo bash server/setup-server.sh
+sudo WG_PORT=443 bash server/setup-server.sh   # 443 matches the automatic deploy
 ```
 Note the **public IP** and **listen port** it prints at the end.
 
 ### 2. Open the port in Azure (locally)
-WireGuard needs its UDP port allowed inbound in the VM's Network Security Group:
+AmneziaWG needs its UDP port allowed inbound in the VM's Network Security Group.
+This is a **one-time** step; the default deploy port is **443**:
 ```bash
 az network nsg list -o table                       # find your NSG name
-RG=<resource-group> NSG=<nsg-name> WG_PORT=51820 bash azure/open-ports.sh
+RG=<resource-group> NSG=<nsg-name> bash azure/open-ports.sh   # opens UDP 443
 ```
-(Or do it in the Portal: VM → Networking → Add inbound port rule → UDP, port 51820.)
+(Or do it in the Portal: VM → Networking → Add inbound port rule → UDP, port 443.)
 
 ### 3. Add a client (on the VM)
 ```bash
 sudo bash client/add-client.sh phone
 ```
-This prints a **QR code** — scan it in the WireGuard app (iOS/Android), or copy the
-generated `clients/phone.conf` to a desktop WireGuard client. Toggle on. Done.
+This prints a **QR code** — scan it in the **AmneziaWG** app (iOS/Android), or copy
+the generated `clients/phone.conf` to a desktop AmneziaWG / Amnezia VPN client.
+Toggle on. Done.
 
 Verify your exit IP changed: open https://ipinfo.io — it should show the VM's country.
 
@@ -82,21 +98,22 @@ Verify your exit IP changed: open https://ipinfo.io — it should show the VM's 
 
 ## Censorship bypass — read this
 
-Your stated goal is getting around censorship. Be aware:
+Your stated goal is getting around censorship (Russia / TSPU). This project now
+runs **AmneziaWG**, which obfuscates the handshake so DPI can't fingerprint it as
+WireGuard. That defeats the fingerprint-based blocking that stops plain WireGuard.
+Still worth knowing:
 
-- **Plain WireGuard is fast but not stealthy.** Its handshake has a recognizable
-  signature. Basic geo-blocks and lightweight filtering won't stop it, but a serious
-  DPI-based censor (GFW-class) can detect and block/throttle it.
-- **Cheap hardening that helps:**
-  - Run WireGuard on **UDP 443** instead of 51820 (looks like QUIC/HTTPS, less likely
-    to be blocked, and 443 is rarely filtered). Re-run setup with `WG_PORT=443`.
-  - Keep `PersistentKeepalive = 25` (already set) so the tunnel survives strict NAT.
-- **If plain WG gets blocked, escalate to obfuscation:**
-  - **AmneziaWG** — a WireGuard fork that masks the handshake to defeat DPI. Same
-    speed, near-identical config. This is the recommended next step and the project
-    is structured to migrate to it (see TODO below).
-  - **Shadowsocks / Outline** — disguises traffic as ordinary TLS; strongest against
-    aggressive censors, but it's a different protocol than WireGuard.
+- **Run it on UDP 443.** Re-deploy with `WG_PORT=443` so the traffic also *looks*
+  like QUIC/HTTPS on a rarely-filtered port. Obfuscation + 443 is the strong combo.
+  (Remember to open UDP 443 in the NSG, not 51820 — see `azure/open-ports.sh`.)
+- **The obfuscation params are randomized per deploy** and stored server-side in
+  `/etc/amnezia/amneziawg/params.env`. Server and every client share the same values
+  (`add-client.sh` reads them automatically), so your signature is unique to you.
+- Keep `PersistentKeepalive = 25` (already set) so the tunnel survives strict NAT.
+- **If a region's TSPU still catches AmneziaWG**, the next escalation is
+  **VLESS + XTLS-Reality** (Xray / sing-box) — traffic disguised as a real TLS
+  handshake to a borrowed SNI. Strongest option, but a different protocol/stack
+  (see TODO below).
 
 > ⚠️ Bypassing censorship may carry legal/personal risk depending on the country you
 > connect *from*. Understand your local situation before relying on this.
@@ -111,21 +128,23 @@ Your stated goal is getting around censorship. Be aware:
 
 ## Security notes
 
-- Private keys live in `/etc/wireguard/` on the VM and inside each client `.conf`.
+- Private keys and the obfuscation `params.env` live in `/etc/amnezia/amneziawg/`
+  on the VM, and each client `.conf` holds a private key.
   **Never commit them** — `.gitignore` already blocks `*.key` and `clients/*.conf`.
 - One config per device. To revoke a device, delete its `[Peer]` block from
-  `/etc/wireguard/wg0.conf` and run `sudo systemctl restart wg-quick@wg0`.
+  `/etc/amnezia/amneziawg/awg0.conf` and run `sudo systemctl restart awg-quick@awg0`.
 
 ## Layout
 
 ```
-server/setup-server.sh   # install + configure WireGuard on the VM
+server/setup-server.sh   # install + configure AmneziaWG on the VM
 client/add-client.sh     # generate a new device config + QR code
 azure/open-ports.sh      # open the UDP port in the Azure NSG (az CLI)
 ```
 
 ## TODO / possible next steps
 
-- [ ] AmneziaWG migration path for stronger censorship resistance
-- [ ] Optional: move listen port to UDP 443
+- [x] AmneziaWG migration for stronger censorship resistance
+- [ ] Move listen port to UDP 443 (re-deploy with `WG_PORT=443` + open it in the NSG)
+- [ ] VLESS + XTLS-Reality fallback if AmneziaWG gets blocked in a region
 - [ ] Optional: Terraform to provision the VM from scratch
