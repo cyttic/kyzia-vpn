@@ -110,8 +110,10 @@ else
   AWG_S1="$(shuf -i 15-150 -n 1)"
   AWG_S2="$(shuf -i 15-150 -n 1)"
   while [[ $((AWG_S1 + 56)) -eq "${AWG_S2}" ]]; do AWG_S2="$(shuf -i 15-150 -n 1)"; done
-  # shuf -n 4 guarantees 4 distinct values.
-  read -r AWG_H1 AWG_H2 AWG_H3 AWG_H4 < <(shuf -i 5-2147483647 -n 4 | tr '\n' ' ')
+  # shuf -n 4 guarantees 4 distinct values. Use a here-string (<<<) so the input
+  # ends in a newline — otherwise `read` returns non-zero and `set -e` aborts,
+  # even though the variables were assigned correctly.
+  read -r AWG_H1 AWG_H2 AWG_H3 AWG_H4 <<< "$(shuf -i 5-2147483647 -n 4 | tr '\n' ' ')"
   cat > "${PARAMS_ENV}" <<EOF
 AWG_JC=${AWG_JC}
 AWG_JMIN=${AWG_JMIN}
