@@ -64,11 +64,14 @@ if [[ -f "${PARAMS_ENV}" ]]; then
 else
   echo ">> Generating REALITY keypair + short id..."
   keys="$(xray x25519)"
-  REALITY_PRIVATE_KEY="$(printf '%s\n' "${keys}" | sed -n 's/.*[Pp]rivate key:[[:space:]]*//p' | tr -d '[:space:]')"
-  REALITY_PUBLIC_KEY="$(printf '%s\n' "${keys}"  | sed -n 's/.*[Pp]ublic key:[[:space:]]*//p'  | tr -d '[:space:]')"
-  # Older xray builds label the public value "Password:".
-  [[ -z "${REALITY_PUBLIC_KEY}" ]] && \
-    REALITY_PUBLIC_KEY="$(printf '%s\n' "${keys}" | sed -n 's/.*[Pp]assword:[[:space:]]*//p' | tr -d '[:space:]')"
+  # xray builds vary in wording:
+  #   newer:  "PrivateKey: X" / "Password (PublicKey): Y"
+  #   older:  "Private key: X" / "Public key: Y"
+  # Split on ": " and take the value; match the private line but exclude the
+  # public one (which contains "Public"), and grab the public value from whichever
+  # line mentions Public or Password.
+  REALITY_PRIVATE_KEY="$(printf '%s\n' "${keys}" | awk -F': *' '/[Pp]rivate ?[Kk]ey/ && !/[Pp]ublic/ {print $NF; exit}' | tr -d '[:space:]')"
+  REALITY_PUBLIC_KEY="$(printf '%s\n'  "${keys}" | awk -F': *' '/[Pp]ublic ?[Kk]ey|[Pp]assword/    {print $NF; exit}' | tr -d '[:space:]')"
   REALITY_SHORT_ID="$(openssl rand -hex 8)"
   if [[ -z "${REALITY_PRIVATE_KEY}" || -z "${REALITY_PUBLIC_KEY}" ]]; then
     echo "Failed to parse xray x25519 output. Raw output was:" >&2
