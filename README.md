@@ -111,9 +111,43 @@ Still worth knowing:
   (`add-client.sh` reads them automatically), so your signature is unique to you.
 - Keep `PersistentKeepalive = 25` (already set) so the tunnel survives strict NAT.
 - **If a region's TSPU still catches AmneziaWG**, the next escalation is
-  **VLESS + XTLS-Reality** (Xray / sing-box) — traffic disguised as a real TLS
-  handshake to a borrowed SNI. Strongest option, but a different protocol/stack
-  (see TODO below).
+  **VLESS + XTLS-Reality** — now included, see the section below.
+
+---
+
+## Plan B — REALITY fallback (VLESS + XTLS-Vision)
+
+AmneziaWG works today, but plan for it breaking. There are two different failure
+modes and they need **different** fixes:
+
+| What TSPU did | Symptom | The fix |
+|---|---|---|
+| **Fingerprinted** the protocol | AmneziaWG handshake stops completing; a fresh IP works | **REALITY** (below) — same IP is fine |
+| **Blocked your IP** | *Everything* to your IP dies; even a fresh IP protocol test dies | A **new IP** (spare VM, ideally non-Azure). REALITY on the *same* IP does **not** help |
+
+REALITY defeats **fingerprinting**, not IP blocking. It runs **Xray** on **TCP
+443** (AmneziaWG stays on **UDP 443** — no conflict, both run at once), and
+disguises the tunnel as an ordinary HTTPS visit to a real, unblocked site (the
+"borrowed" SNI, `www.microsoft.com` by default). An active prober that connects
+gets proxied to the *real* site, so there's no VPN fingerprint to catch.
+
+**Client side:** import **both** profiles now, while things work — then an
+emergency switch is one tap, no config transfer needed. REALITY needs the **full
+"Amnezia VPN" app** (or v2rayNG / Streisand), **not** the standalone *AmneziaWG*
+app — the full app speaks both protocols, so you lose nothing.
+
+Deploy (runs on every push, alongside AmneziaWG). One-time, open TCP 443 in the NSG:
+```bash
+PROTOCOL=Tcp RULE_NAME=Allow-Reality PRIORITY=1010 \
+  RG=<resource-group> NSG=<nsg-name> bash azure/open-ports.sh
+```
+Or manually on the VM:
+```bash
+sudo bash server/setup-reality.sh
+sudo bash client/add-reality-client.sh phone     # prints a vless:// link + QR
+```
+The GitHub Actions run uploads the link as the **`reality-<name>`** artifact
+(the `wg-<name>` artifact is still your AmneziaWG config). Import both.
 
 > ⚠️ Bypassing censorship may carry legal/personal risk depending on the country you
 > connect *from*. Understand your local situation before relying on this.
@@ -137,14 +171,17 @@ Still worth knowing:
 ## Layout
 
 ```
-server/setup-server.sh   # install + configure AmneziaWG on the VM
-client/add-client.sh     # generate a new device config + QR code
-azure/open-ports.sh      # open the UDP port in the Azure NSG (az CLI)
+server/setup-server.sh        # install + configure AmneziaWG on the VM (UDP)
+server/setup-reality.sh       # install + configure Xray VLESS/REALITY (TCP 443)
+client/add-client.sh          # generate an AmneziaWG device config + QR code
+client/add-reality-client.sh  # generate a REALITY vless:// link + QR code
+azure/open-ports.sh           # open a UDP/TCP port in the Azure NSG (az CLI)
 ```
 
 ## TODO / possible next steps
 
 - [x] AmneziaWG migration for stronger censorship resistance
 - [ ] Move listen port to UDP 443 (re-deploy with `WG_PORT=443` + open it in the NSG)
-- [ ] VLESS + XTLS-Reality fallback if AmneziaWG gets blocked in a region
+- [x] VLESS + XTLS-Reality fallback if AmneziaWG gets blocked in a region
+- [ ] Keep a spare VM (ideally non-Azure) ready — the fix for an **IP** block
 - [ ] Optional: Terraform to provision the VM from scratch

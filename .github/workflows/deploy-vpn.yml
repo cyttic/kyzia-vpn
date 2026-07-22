@@ -90,3 +90,31 @@ jobs:
           name: wg-${{ env.CLIENT_NAME }}
           path: ${{ env.CLIENT_NAME }}.conf
           retention-days: 1
+
+      # ---- REALITY fallback (Xray on TCP 443, alongside AmneziaWG) -----------
+      # Needs TCP 443 open in the NSG (one-time: PROTOCOL=Tcp azure/open-ports.sh).
+      - name: Install / refresh REALITY (Xray) server
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" \
+            "set -e; cd \$HOME/kyzia-vpn; \
+             sudo env bash server/setup-reality.sh"
+
+      - name: Add REALITY client and fetch its link
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new \
+            "$SSH_USER@$SSH_HOST" \
+            "set -e; cd \$HOME/kyzia-vpn; \
+             sudo env ENDPOINT='$SSH_HOST' FORCE='$FORCE' OUT_DIR=\$HOME/kyzia-vpn/clients \
+               bash client/add-reality-client.sh '$CLIENT_NAME' 2>/dev/null; \
+             sudo cat \$HOME/kyzia-vpn/clients/'$CLIENT_NAME'-reality.txt" > "$CLIENT_NAME-reality.txt"
+          if [[ ! -s "$CLIENT_NAME-reality.txt" ]]; then
+            echo "::error::REALITY link was empty or not produced (see step log above)"; exit 1
+          fi
+
+      - name: Upload REALITY link (download it, then delete this run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: reality-${{ env.CLIENT_NAME }}
+          path: ${{ env.CLIENT_NAME }}-reality.txt
+          retention-days: 1
