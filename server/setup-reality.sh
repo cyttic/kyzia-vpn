@@ -26,9 +26,16 @@ CONFIG="${XRAY_DIR}/config.json"
 PARAMS_ENV="${XRAY_DIR}/params.env"
 REALITY_PORT="${REALITY_PORT:-443}"        # TCP. Blends with HTTPS.
 # The real site we impersonate. It MUST be reachable from the VM, support TLS 1.3
-# + HTTP/2, and NOT be blocked in the country you connect FROM. Good picks: a big,
-# boring, always-up site on a major host. Override if you like.
-REALITY_DEST="${REALITY_DEST:-www.microsoft.com:443}"
+# + HTTP/2, serve content directly (NO redirect — so use www.apple.com, not the
+# bare apple.com), and NOT be blocked in the country you connect FROM.
+#
+# NOT every big site works: the server has to *relay* the client's real TLS
+# handshake to this site, and some hosts answer in ways that break the relay
+# (the handshake dies with "REALITY: processed invalid connection ... handshake
+# did not complete"). www.microsoft.com FAILS this way in practice; www.apple.com
+# works. If you see that error with all keys correct, swap this for another site
+# (www.swift.com, dl.google.com, www.cloudflare.com) and re-add clients.
+REALITY_DEST="${REALITY_DEST:-www.apple.com:443}"
 REALITY_SNI="${REALITY_SNI:-${REALITY_DEST%%:*}}"
 # ----------------------------------------------------------------------------
 
@@ -123,7 +130,10 @@ jq -n \
     }],
     outbounds: [ { protocol: "freedom", tag: "direct" } ]
   }' > "${CONFIG}"
-chmod 600 "${CONFIG}"
+# Xray drops privileges to `nobody`, so it must be able to READ config.json —
+# 644 (root-owned, world-readable) is what the official installer uses. The
+# secret key material stays in params.env, which remains 600 (root only).
+chmod 644 "${CONFIG}"
 
 echo ">> Testing config..."
 if ! { xray -test -config "${CONFIG}" >/dev/null 2>&1 || xray run -test -config "${CONFIG}" >/dev/null 2>&1; }; then
@@ -153,7 +163,8 @@ cat <<EOF
         PROTOCOL=Tcp RULE_NAME=Allow-Reality PRIORITY=1010 \\
           RG=<rg> NSG=<nsg> bash azure/open-ports.sh
    2) Add a client:  sudo bash client/add-reality-client.sh phone
-   3) Import the vless:// link/QR into the full "Amnezia VPN" app
-      (NOT the standalone AmneziaWG app — it can't do REALITY).
+   3) Import the vless:// link/QR into v2rayNG (Android) or sing-box/Streisand
+      (iOS). Do NOT use the Amnezia app for REALITY — its vless:// import is
+      unreliable (shows "Connected" but routes nothing).
 ============================================================
 EOF

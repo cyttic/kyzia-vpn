@@ -11,9 +11,10 @@
 # UUID. The disguise (borrowed SNI, keys) lives entirely in the server config, so
 # nothing device-specific needs to stay in sync.
 #
-# CLIENT NOTE: import the link into the full "Amnezia VPN" app, or any Xray client
-# (v2rayNG on Android, Streisand/Shadowrocket on iOS). The standalone AmneziaWG app
-# does NOT support REALITY.
+# CLIENT NOTE: import the link into v2rayNG (Android) or sing-box/Streisand (iOS).
+# Do NOT use the Amnezia app for REALITY — the standalone AmneziaWG app can't do it
+# at all, and the full Amnezia VPN app's vless:// import is unreliable (it shows
+# "Connected" but routes no traffic).
 #
 set -euo pipefail
 
@@ -62,7 +63,9 @@ else
   jq --arg id "${UUID}" --arg n "${NAME}" \
     '.inbounds[0].settings.clients += [{ "id": $id, "flow": "xtls-rprx-vision", "email": $n }]' \
     "${CONFIG}" > "${tmp}" && mv "${tmp}" "${CONFIG}"
-  chmod 600 "${CONFIG}"
+  # 644 so the `nobody` xray runtime can read it (see setup-reality.sh); mktemp
+  # defaults to 600, so an explicit chmod is required after the mv.
+  chmod 644 "${CONFIG}"
   if ! { xray -test -config "${CONFIG}" >/dev/null 2>&1 || xray run -test -config "${CONFIG}" >/dev/null 2>&1; }; then
     echo "xray config test FAILED after adding client — not reloading." >&2
     exit 1
@@ -85,7 +88,7 @@ fi
 
 echo ">> REALITY client '${NAME}' ready." >&2
 echo ">> Link written to: ${CONF}" >&2
-echo ">> Scan this QR with the Amnezia VPN app (or v2rayNG / Streisand):" >&2
+echo ">> Scan this QR with v2rayNG (Android) or sing-box/Streisand (iOS):" >&2
 echo >&2
 qrencode -t ansiutf8 <<< "${LINK}" >&2
 echo >&2

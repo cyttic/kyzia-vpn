@@ -128,13 +128,18 @@ modes and they need **different** fixes:
 REALITY defeats **fingerprinting**, not IP blocking. It runs **Xray** on **TCP
 443** (AmneziaWG stays on **UDP 443** — no conflict, both run at once), and
 disguises the tunnel as an ordinary HTTPS visit to a real, unblocked site (the
-"borrowed" SNI, `www.microsoft.com` by default). An active prober that connects
+"borrowed" SNI, `www.apple.com` by default). An active prober that connects
 gets proxied to the *real* site, so there's no VPN fingerprint to catch.
 
-**Client side:** import **both** profiles now, while things work — then an
-emergency switch is one tap, no config transfer needed. REALITY needs the **full
-"Amnezia VPN" app** (or v2rayNG / Streisand), **not** the standalone *AmneziaWG*
-app — the full app speaks both protocols, so you lose nothing.
+**Client app — use a real Xray client, NOT the Amnezia app:**
+- **Android:** [v2rayNG](https://github.com/2dust/v2rayNG) — `+` → *Import config from clipboard* → paste the `vless://` link.
+- **iOS:** sing-box or Streisand — same link.
+- The standalone *AmneziaWG* app can't do REALITY at all, and the full *Amnezia
+  VPN* app's import of a raw `vless://…reality` link is unreliable (it may show
+  "Connected" but route nothing). Use v2rayNG / sing-box for the REALITY profile.
+
+Import **both** profiles (AmneziaWG + REALITY) now, while things work — then an
+emergency switch is one tap, no config transfer needed under pressure.
 
 Deploy (runs on every push, alongside AmneziaWG). One-time, open TCP 443 in the NSG:
 ```bash
@@ -148,6 +153,13 @@ sudo bash client/add-reality-client.sh phone     # prints a vless:// link + QR
 ```
 The GitHub Actions run uploads the link as the **`reality-<name>`** artifact
 (the `wg-<name>` artifact is still your AmneziaWG config). Import both.
+
+> **If a client logs `REALITY: processed invalid connection … handshake did not
+> complete` with every key correct**, the borrowed site is the culprit — some
+> hosts (notably `www.microsoft.com`) don't relay the TLS handshake cleanly.
+> Swap it: set `REALITY_DEST`/`REALITY_SNI` (e.g. `www.apple.com`, `www.swift.com`,
+> `dl.google.com`) in `/etc/…/params.env`, re-run `setup-reality.sh`, and re-add
+> clients. `config.json` must be `644` (Xray runs as `nobody` and must read it).
 
 > ⚠️ Bypassing censorship may carry legal/personal risk depending on the country you
 > connect *from*. Understand your local situation before relying on this.
